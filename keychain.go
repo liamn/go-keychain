@@ -1,3 +1,4 @@
+//go:build darwin
 // +build darwin
 
 package keychain
@@ -126,6 +127,8 @@ var (
 	CreationDateKey = attrKey(C.CFTypeRef(C.kSecAttrCreationDate))
 	// ModificationDateKey is for kSecAttrModificationDate
 	ModificationDateKey = attrKey(C.CFTypeRef(C.kSecAttrModificationDate))
+	// AccessControlKey is for kSecAttrAccessControl
+	AccessControlKey = attrKey(C.CFTypeRef(C.kSecAttrAccessControl))
 )
 
 // Synchronizable is the items synchronizable status
@@ -171,6 +174,35 @@ const (
 	// AccessibleAccessibleAlwaysThisDeviceOnly is always for this device only
 	AccessibleAccessibleAlwaysThisDeviceOnly = 7
 )
+
+type AccessControlFlag int
+
+const (
+	// AccessControlFlagDevicePasscode controls access to an item with a passcode
+	AccessControlFlagDevicePasscode AccessControlFlag = 1
+	// AccessControlFlagBiometryAny controls access to an item with Touch ID for any enrolled fingers, or Face ID..
+	AccessControlFlagBiometryAny = 2
+	// AccessControlFlagBiometryCurrentSet controls access to an item with Touch ID for currently enrolled fingers, or from Face ID with the currently enrolled user.
+	AccessControlFlagBiometryCurrentSet = 3
+	// AccessControlFlagUserPresence controls access to an item with either biometry or passcode.
+	AccessControlFlagUserPresence = 4
+	// AccessControlFlagWatch controls access to an item with a watch.
+	AccessControlFlagWatch = 5
+	// AccessControlFlagAnd Indicates that all constraints must be satisfied.
+	AccessControlFlagAnd = 6
+	// AccessControlFlagOr indicates that at least one constraint must be satisfied.
+	AccessControlFlagOr = 7
+)
+
+var accessControlFlagRef = map[AccessControlFlag]C.CFOptionFlags{
+	AccessControlFlagDevicePasscode:     C.kSecAccessControlDevicePasscode,
+	AccessControlFlagBiometryAny:        C.kSecAccessControlBiometryAny,
+	AccessControlFlagBiometryCurrentSet: C.kSecAccessControlBiometryCurrentSet,
+	AccessControlFlagUserPresence:       C.kSecAccessControlUserPresence,
+	AccessControlFlagWatch:              C.kSecAccessControlWatch,
+	AccessControlFlagAnd:                C.kSecAccessControlAnd,
+	AccessControlFlagOr:                 C.kSecAccessControlOr,
+}
 
 // MatchLimit is whether to limit results on query
 type MatchLimit int
@@ -270,6 +302,25 @@ func (k *Item) SetAccessible(accessible Accessible) {
 	} else {
 		delete(k.attr, AccessibleKey)
 	}
+}
+
+func (k *Item) SetAccessControlFlags(accessibility Accessible, flag AccessControlFlag) error {
+	cfAccessibility := accessibleTypeRef[accessibility]
+	var err *C.CFErrorRef
+
+	cfFlag := accessControlFlagRef[flag]
+	ac := C.SecAccessControlCreateWithFlags(
+		C.kCFAllocatorDefault,
+		cfAccessibility,
+		C.SecAccessControlCreateFlags(cfFlag),
+		err,
+	)
+	if err != nil {
+		return fmt.Errorf("failed to create access control: %+v", err)
+	}
+
+	k.attr[AccessControlKey] = C.CFTypeRef(ac)
+	return nil
 }
 
 // SetMatchLimit sets the match limit
